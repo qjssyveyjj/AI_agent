@@ -12,7 +12,14 @@ interface Message {
   role: "user" | "assistant";
   text: string;
   images?: string[];
+  files?: string[];
   tools?: ToolTrace[];
+}
+
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 interface Conversation {
@@ -45,12 +52,28 @@ export default function App() {
   const [activeId, setActiveId] = useState<string>(() => "");
   const [input, setInput] = useState("");
   const [images, setImages] = useState<string[]>([]);
+  const [docs, setDocs] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
+  const attachRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!activeId && conversations[0]) setActiveId(conversations[0].id);
   }, [activeId, conversations]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (attachRef.current && !attachRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [menuOpen]);
 
   const active = useMemo(
     () => conversations.find((c) => c.id === activeId) ?? conversations[0],
@@ -74,6 +97,11 @@ export default function App() {
       if (f.type.startsWith("image/")) urls.push(await fileToDataUrl(f));
     }
     if (urls.length) setImages((prev) => [...prev, ...urls]);
+  }, []);
+
+  const addDocs = useCallback((files: FileList | File[]) => {
+    const list = Array.from(files).filter((f) => !f.type.startsWith("image/"));
+    if (list.length) setDocs((prev) => [...prev, ...list]);
   }, []);
 
   const onPaste = useCallback(
@@ -101,13 +129,24 @@ export default function App() {
     setActiveId(conv.id);
     setInput("");
     setImages([]);
+    setDocs([]);
   }, []);
 
   const send = useCallback(async () => {
-    if (sending || (!input.trim() && images.length === 0)) return;
-    const userMsg: Message = { role: "user", text: input, images: [...images] };
+    if (sending || (!input.trim() && images.length === 0 && docs.length === 0)) return;
+    const docNames = docs.map((f) => f.name);
+    const fileNote = docNames.length ? `（附件：${docNames.join("、")}）` : "";
+    const payloadText = [input, fileNote].filter(Boolean).join("\n");
+
+    const userMsg: Message = {
+      role: "user",
+      text: input,
+      images: [...images],
+      files: docNames,
+    };
     const assistantMsg: Message = { role: "assistant", text: "", tools: [] };
-    const titleSeed = input.trim().slice(0, 18) || "图片对话";
+    const titleSeed =
+      input.trim().slice(0, 18) || docNames[0] || (images.length ? "图片对话" : "新对话");
 
     patchActive((c) => ({
       ...c,
@@ -116,11 +155,11 @@ export default function App() {
     }));
     setSending(true);
 
-    const payloadText = input;
     const payloadImages = [...images];
     const convId = active.id;
     setInput("");
     setImages([]);
+    setDocs([]);
 
     const updateAssistant = (fn: (m: Message) => Message) => {
       setConversations((prev) =>
@@ -151,7 +190,7 @@ export default function App() {
     } finally {
       setSending(false);
     }
-  }, [sending, input, images, active, patchActive]);
+  }, [sending, input, images, docs, active, patchActive]);
 
   const stats = useMemo(() => {
     const messages = conversations.reduce((n, c) => n + c.messages.length, 0);
@@ -234,17 +273,92 @@ export default function App() {
               ))}
             </div>
           )}
+          {docs.length > 0 && (
+            <div className="doc-chips">
+              {docs.map((f, i) => (
+                <div className="doc-chip" key={i}>
+                  <span className="doc-ico">{f.name.split(".").pop()?.toUpperCase() || "FILE"}</span>
+                  <span className="doc-meta">
+                    <span className="doc-name">{f.name}</span>
+                    <span className="doc-size">{formatSize(f.size)}</span>
+                  </span>
+                  <button
+                    className="doc-remove"
+                    onClick={() => setDocs((p) => p.filter((_, idx) => idx !== i))}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="composer-row">
-            <label className="upload-btn">
-              图片
+            <div className="attach" ref={attachRef}>
+              <button
+                type="button"
+                className={`attach-btn ${menuOpen ? "open" : ""}`}
+                aria-label="添加内容"
+                onClick={() => setMenuOpen((v) => !v)}
+              >
+                +
+              </button>
+              {menuOpen && (
+                <div className="attach-menu">
+                  <button
+                    type="button"
+                    className="attach-menu-item"
+                    onClick={() => {
+                      fileInputRef.current?.click();
+                      setMenuOpen(false);
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                      <rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                      <circle cx="8.5" cy="9.5" r="1.6" fill="currentColor" />
+                      <path d="M5 17l4.5-5 3 3.5L15.5 12 19 17" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                    </svg>
+                    上传图片
+                  </button>
+                  <button
+                    type="button"
+                    className="attach-menu-item"
+                    onClick={() => {
+                      docInputRef.current?.click();
+                      setMenuOpen(false);
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                      <path d="M14 3v5h5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                      <path d="M8.5 13h7M8.5 16.5h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                    </svg>
+                    上传文件
+                  </button>
+                </div>
+              )}
               <input
+                ref={fileInputRef}
                 type="file"
                 accept="image/*"
                 multiple
                 hidden
-                onChange={(e) => e.target.files && addImages(e.target.files)}
+                onChange={(e) => {
+                  if (e.target.files) void addImages(e.target.files);
+                  e.target.value = "";
+                }}
               />
-            </label>
+              <input
+                ref={docInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx"
+                multiple
+                hidden
+                onChange={(e) => {
+                  if (e.target.files) addDocs(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </div>
             <textarea
               value={input}
               placeholder="输入问题，支持粘贴/拖拽截图…（Enter 发送，Shift+Enter 换行）"
@@ -280,6 +394,12 @@ function handleEvent(
     case "token":
       updateAssistant((m) => ({ ...m, text: m.text + (ev.content ?? "") }));
       break;
+    case "error":
+      updateAssistant((m) => ({
+        ...m,
+        text: m.text + `\n[服务错误] ${ev.message ?? "未知错误"}`,
+      }));
+      break;
     case "tool_call":
       updateAssistant((m) => ({
         ...m,
@@ -311,6 +431,16 @@ function MessageBubble({ msg, thinking }: { msg: Message; thinking?: boolean }) 
         {msg.images?.map((src, i) => (
           <img className="msg-img" key={i} src={src} alt="" />
         ))}
+        {msg.files && msg.files.length > 0 && (
+          <div className="msg-files">
+            {msg.files.map((name, i) => (
+              <div className="msg-file" key={i}>
+                <span className="doc-ico">{name.split(".").pop()?.toUpperCase() || "FILE"}</span>
+                <span className="doc-name">{name}</span>
+              </div>
+            ))}
+          </div>
+        )}
         {msg.tools?.map((t, i) => (
           <div className="tool-trace" key={i}>
             <span className="tool-name">调用工具 · {t.name}</span>

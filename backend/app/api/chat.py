@@ -1,4 +1,5 @@
 import json
+import logging
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends
@@ -11,6 +12,7 @@ from app.security.auth import get_current_user
 from app.session import store
 
 router = APIRouter(prefix="/api", tags=["chat"])
+logger = logging.getLogger("ai_agent.chat")
 
 
 class ChatRequest(BaseModel):
@@ -43,11 +45,21 @@ async def chat(req: ChatRequest, user: str = Depends(get_current_user)) -> Strea
         yield _sse({"type": "session", "session_id": session_id})
         # run_agent 会原地向 messages 追加 assistant/tool 消息
         start_len = len(messages)
-        async for event in run_agent(messages):
-            yield _sse(event)
-        # 落库本轮新增的非用户消息（assistant / tool）
-        for msg in messages[start_len:]:
-            await store.append_message(session_id, msg)
+        try:
+            async for event in run_agent(messages):
+                yield _sse(event)
+        except Exception as e:  # noqa: BLE001 避免异常直接中断 SSE 连接（前端会显示 network error）
+            logger.exception("agent 执行失败")
+            yield _sse(
+                {
+                    "type": "error",
+                    "message": f"模型服务调用失败：{type(e).__name__}: {e}",
+                }
+            )
+        else:
+            # 仅在成功时落库本轮新增的非用户消息（assistant / tool）
+            for msg in messages[start_len:]:
+                await store.append_message(session_id, msg)
         yield _sse({"type": "done"})
 
     return StreamingResponse(

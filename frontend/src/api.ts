@@ -1,10 +1,11 @@
 export interface ChatEvent {
-  type: "session" | "tool_call" | "tool_result" | "token" | "final" | "done";
+  type: "session" | "tool_call" | "tool_result" | "token" | "final" | "done" | "error";
   session_id?: string;
   name?: string;
   arguments?: Record<string, unknown>;
   result?: unknown;
   content?: string;
+  message?: string;
 }
 
 export interface ChatPayload {
