@@ -520,7 +520,7 @@ body::before {
 
 .composer-row {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 12px;
   padding: 10px;
   border-radius: 18px;
