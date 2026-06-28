@@ -108,3 +108,20 @@ npm run dev   # http://localhost:5173, 已配置 /api 代理到 8000
 | POST | `/api/sessions` | 创建会话 |
 | GET | `/api/sessions/{id}/messages` | 查询会话历史 |
 | POST | `/api/chat` | 多模态对话，SSE 流式返回 |
+| POST | `/api/kb/documents` | 上传文档入知识库（multipart） |
+| GET | `/api/kb/documents` | 知识库文档列表 |
+| DELETE | `/api/kb/documents/{id}` | 删除文档及其分块 |
+| POST | `/api/kb/search` | 知识库检索（调试用） |
+
+## 生产系统知识库（RAG）
+
+文档经"解析 → 分块 → 向量化 → 存入 PostgreSQL + pgvector"入库；问答时 Agent 自动调用 `kb_search` 工具检索资料并据此作答。
+
+- 向量库：PostgreSQL + pgvector（compose 中 postgres 镜像为 `pgvector/pgvector:pg16`）。
+- 嵌入模型：可配置的 OpenAI 兼容 `/v1/embeddings` 端点，见 `.env` 的 `EMBED_*`。
+- 入库方式：
+  - 前端：左侧「知识库管理」面板或输入框「+ → 上传到知识库」上传 PDF/Word/Excel/TXT/Markdown。
+  - 管理员批量：`python -m scripts.ingest_dir <目录路径>`（在 `backend` 目录下执行）。
+- 检索集成：`backend/app/tools/kb_search.py` 注册为 Agent 工具，问答时自动调用，无需改动 Agent 循环。
+
+可选：`backend/kb_mcp_server/` 将知识库通过 MCP 协议暴露为标准工具，供 Cursor 等 MCP 客户端复用（独立环境运行，详见该目录 README）。

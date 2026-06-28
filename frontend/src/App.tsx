@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { streamChat, type ChatEvent } from "./api";
 import Dashboard from "./Dashboard";
+import KbPanel from "./KbPanel";
 
 interface ToolTrace {
   name: string;
@@ -12,14 +13,7 @@ interface Message {
   role: "user" | "assistant";
   text: string;
   images?: string[];
-  files?: string[];
   tools?: ToolTrace[];
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 interface Conversation {
@@ -52,12 +46,11 @@ export default function App() {
   const [activeId, setActiveId] = useState<string>(() => "");
   const [input, setInput] = useState("");
   const [images, setImages] = useState<string[]>([]);
-  const [docs, setDocs] = useState<File[]>([]);
   const [sending, setSending] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [kbOpen, setKbOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const docInputRef = useRef<HTMLInputElement>(null);
   const attachRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -99,11 +92,6 @@ export default function App() {
     if (urls.length) setImages((prev) => [...prev, ...urls]);
   }, []);
 
-  const addDocs = useCallback((files: FileList | File[]) => {
-    const list = Array.from(files).filter((f) => !f.type.startsWith("image/"));
-    if (list.length) setDocs((prev) => [...prev, ...list]);
-  }, []);
-
   const onPaste = useCallback(
     (e: React.ClipboardEvent) => {
       const files = Array.from(e.clipboardData.files);
@@ -129,24 +117,19 @@ export default function App() {
     setActiveId(conv.id);
     setInput("");
     setImages([]);
-    setDocs([]);
   }, []);
 
   const send = useCallback(async () => {
-    if (sending || (!input.trim() && images.length === 0 && docs.length === 0)) return;
-    const docNames = docs.map((f) => f.name);
-    const fileNote = docNames.length ? `（附件：${docNames.join("、")}）` : "";
-    const payloadText = [input, fileNote].filter(Boolean).join("\n");
+    if (sending || (!input.trim() && images.length === 0)) return;
+    const payloadText = input;
 
     const userMsg: Message = {
       role: "user",
       text: input,
       images: [...images],
-      files: docNames,
     };
     const assistantMsg: Message = { role: "assistant", text: "", tools: [] };
-    const titleSeed =
-      input.trim().slice(0, 18) || docNames[0] || (images.length ? "图片对话" : "新对话");
+    const titleSeed = input.trim().slice(0, 18) || (images.length ? "图片对话" : "新对话");
 
     patchActive((c) => ({
       ...c,
@@ -159,7 +142,6 @@ export default function App() {
     const convId = active.id;
     setInput("");
     setImages([]);
-    setDocs([]);
 
     const updateAssistant = (fn: (m: Message) => Message) => {
       setConversations((prev) =>
@@ -190,7 +172,7 @@ export default function App() {
     } finally {
       setSending(false);
     }
-  }, [sending, input, images, docs, active, patchActive]);
+  }, [sending, input, images, active, patchActive]);
 
   const stats = useMemo(() => {
     const messages = conversations.reduce((n, c) => n + c.messages.length, 0);
@@ -210,6 +192,13 @@ export default function App() {
         </div>
         <button className="new-chat" onClick={createConversation}>
           + 新建对话
+        </button>
+        <button className="kb-entry" onClick={() => setKbOpen(true)}>
+          <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+            <path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+            <path d="M8 11h8M8 15h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+          知识库管理
         </button>
         <div className="conv-list">
           {conversations.map((c) => (
@@ -273,25 +262,6 @@ export default function App() {
               ))}
             </div>
           )}
-          {docs.length > 0 && (
-            <div className="doc-chips">
-              {docs.map((f, i) => (
-                <div className="doc-chip" key={i}>
-                  <span className="doc-ico">{f.name.split(".").pop()?.toUpperCase() || "FILE"}</span>
-                  <span className="doc-meta">
-                    <span className="doc-name">{f.name}</span>
-                    <span className="doc-size">{formatSize(f.size)}</span>
-                  </span>
-                  <button
-                    className="doc-remove"
-                    onClick={() => setDocs((p) => p.filter((_, idx) => idx !== i))}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
           <div className="composer-row">
             <div className="attach" ref={attachRef}>
               <button
@@ -323,7 +293,7 @@ export default function App() {
                     type="button"
                     className="attach-menu-item"
                     onClick={() => {
-                      docInputRef.current?.click();
+                      setKbOpen(true);
                       setMenuOpen(false);
                     }}
                   >
@@ -332,7 +302,7 @@ export default function App() {
                       <path d="M14 3v5h5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
                       <path d="M8.5 13h7M8.5 16.5h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
                     </svg>
-                    上传文件
+                    上传到知识库
                   </button>
                 </div>
               )}
@@ -344,17 +314,6 @@ export default function App() {
                 hidden
                 onChange={(e) => {
                   if (e.target.files) void addImages(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-              <input
-                ref={docInputRef}
-                type="file"
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx"
-                multiple
-                hidden
-                onChange={(e) => {
-                  if (e.target.files) addDocs(e.target.files);
                   e.target.value = "";
                 }}
               />
@@ -378,6 +337,8 @@ export default function App() {
       </main>
 
       <Dashboard stats={stats} />
+
+      {kbOpen && <KbPanel onClose={() => setKbOpen(false)} />}
     </div>
   );
 }
@@ -431,16 +392,6 @@ function MessageBubble({ msg, thinking }: { msg: Message; thinking?: boolean }) 
         {msg.images?.map((src, i) => (
           <img className="msg-img" key={i} src={src} alt="" />
         ))}
-        {msg.files && msg.files.length > 0 && (
-          <div className="msg-files">
-            {msg.files.map((name, i) => (
-              <div className="msg-file" key={i}>
-                <span className="doc-ico">{name.split(".").pop()?.toUpperCase() || "FILE"}</span>
-                <span className="doc-name">{name}</span>
-              </div>
-            ))}
-          </div>
-        )}
         {msg.tools?.map((t, i) => (
           <div className="tool-trace" key={i}>
             <span className="tool-name">调用工具 · {t.name}</span>

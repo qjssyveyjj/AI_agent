@@ -8,7 +8,7 @@ services:
       - redis_data:/data
 
   postgres:
-    image: m.daocloud.io/docker.io/library/postgres:16-alpine
+    image: m.daocloud.io/docker.io/library/pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: aiagent

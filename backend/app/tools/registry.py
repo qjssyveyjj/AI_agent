@@ -1,5 +1,6 @@
 from app.tools.base import Tool
 from app.tools.example_order import QueryOrderStatusTool
+from app.tools.kb_search import KbSearchTool
 
 
 class ToolRegistry:
@@ -24,3 +25,4 @@ registry = ToolRegistry()
 
 # 在此注册所有工具；新增内部 API 工具时追加一行即可
 registry.register(QueryOrderStatusTool())
+registry.register(KbSearchTool())

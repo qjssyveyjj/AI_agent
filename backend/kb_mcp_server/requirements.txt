@@ -1,0 +1,11 @@
+# 知识库 MCP Server 的独立依赖（与主后端分开安装，避免 starlette 版本冲突）
+mcp==1.2.0
+openai==1.59.6
+pydantic==2.10.4
+pydantic-settings==2.7.1
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+pgvector==0.3.6
+pypdf==5.1.0
+python-docx==1.1.2
+openpyxl==3.1.5

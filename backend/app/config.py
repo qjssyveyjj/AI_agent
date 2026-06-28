@@ -25,8 +25,20 @@ class Settings(BaseSettings):
 
     # 会话与存储
     redis_url: str = "redis://localhost:6379/0"
-    database_url: str = ""
+    database_url: str = "postgresql+asyncpg://aiagent:aiagent@localhost:5432/aiagent"
     session_ttl_seconds: int = 86400
+
+    # 嵌入(embedding)模型：OpenAI 兼容 /v1/embeddings
+    embed_base_url: str = "http://localhost:8000/v1"
+    embed_api_key: str = "sk-placeholder"
+    embed_model: str = "bge-m3"
+    embed_dim: int = 1024
+
+    # 知识库(RAG)
+    kb_top_k: int = 5
+    kb_chunk_size: int = 800
+    kb_chunk_overlap: int = 100
+    kb_min_score: float = 0.0
 
     # 安全
     jwt_secret: str = "change-me-in-production"
