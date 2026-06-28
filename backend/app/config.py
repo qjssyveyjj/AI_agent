@@ -28,11 +28,12 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://aiagent:aiagent@localhost:5432/aiagent"
     session_ttl_seconds: int = 86400
 
-    # 嵌入(embedding)模型：OpenAI 兼容 /v1/embeddings
-    embed_base_url: str = "http://localhost:8000/v1"
+    # 嵌入(embedding)模型：OpenAI 兼容 /v1/embeddings（默认阿里通义千问 text-embedding-v4）
+    embed_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     embed_api_key: str = "sk-placeholder"
-    embed_model: str = "bge-m3"
+    embed_model: str = "text-embedding-v4"
     embed_dim: int = 1024
+    embed_batch_size: int = 10  # DashScope 单次 embeddings 输入条数上限
 
     # 知识库(RAG)
     kb_top_k: int = 5
